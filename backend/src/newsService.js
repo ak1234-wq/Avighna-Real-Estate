@@ -31,13 +31,19 @@ export async function getFeed(tabKey, { force = false } = {}) {
 
   stories = stories
     .filter((s) => s && s.title && s.url)
-    .map((s) => ({
-      title: String(s.title).trim(),
-      tldr: String(s.tldr || "").trim(),
-      source: String(s.source || "Source").trim(),
-      url: String(s.url).trim(),
-      published: String(s.published || "recent").trim(),
-    }));
+    .map((s) => {
+      let url = String(s.url).trim();
+      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        url = "https://" + url;
+      }
+      return {
+        title: String(s.title).trim(),
+        tldr: String(s.tldr || "").trim(),
+        source: String(s.source || "Source").trim(),
+        url: url,
+        published: String(s.published || "recent").trim(),
+      };
+    });
 
   const payload = {
     tab: tabKey,

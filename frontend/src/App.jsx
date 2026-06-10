@@ -20,6 +20,12 @@ export default function App() {
   const [assistantStory, setAssistantStory] = useState(null);
 
   const timerRef = useRef(null);
+  const activeTabRef = useRef(activeTab);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+    setError(null);
+  }, [activeTab]);
 
   const scope = TABS.find((t) => t.key === activeTab)?.scope || "Mumbai";
   const current = feeds[activeTab];
@@ -29,15 +35,19 @@ export default function App() {
       const haveData = Boolean(feeds[tab]);
       if (force) setRefreshing(true);
       else if (!haveData) setLoading(true);
-      setError(null);
+      
+      if (activeTabRef.current === tab) setError(null);
+      
       try {
         const data = await fetchNews(tab, { force });
         setFeeds((prev) => ({ ...prev, [tab]: data }));
       } catch (err) {
-        setError(err.message);
+        if (activeTabRef.current === tab) setError(err.message);
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (activeTabRef.current === tab) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [feeds]
