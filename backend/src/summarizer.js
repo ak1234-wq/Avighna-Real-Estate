@@ -54,41 +54,60 @@ Rules:
 Articles:
 ${articleList}`;
 
-  try {
-    const response = await getClient().models.generateContent({
-      model: MODEL,
-      contents: prompt,
-      config: {
-        maxOutputTokens: 1500,
-        temperature: 0.1,
-        thinkingConfig: { thinkingBudget: 0 },
-        // NO googleSearch tool here — Gemini only reads what we give it
-      },
-    });
+  // Retry up to 3 times on 503/429 (Gemini overload)
+  let retries = 3;
+  let delay = 3000;
 
-    const raw = (response.text || "").trim();
+  while (true) {
+    try {
+      const response = await getClient().models.generateContent({
+        model: MODEL,
+        contents: prompt,
+        config: {
+          maxOutputTokens: 1500,
+          temperature: 0.1,
+          thinkingConfig: { thinkingBudget: 0 },
+          // NO googleSearch tool — Gemini only reads what we give it
+        },
+      });
 
-    // Extract JSON array from response
-    const start = raw.indexOf("[");
-    const end = raw.lastIndexOf("]");
-    if (start === -1 || end === -1) throw new Error("No JSON array in response");
+      const raw = (response.text || "").trim();
 
-    const parsed = JSON.parse(raw.slice(start, end + 1));
+      // Extract JSON array from response
+      const start = raw.indexOf("[");
+      const end = raw.lastIndexOf("]");
+      if (start === -1 || end === -1) throw new Error("No JSON array in response");
 
-    // Map tldrs back to articles
-    return articles.map((article, i) => {
-      const match = parsed.find((p) => p.index === i + 1);
-      return {
-        ...article,
-        tldr: match?.tldr || "Summary not available.",
-      };
-    });
-  } catch (err) {
-    console.error("[Summarizer] Failed to summarize batch:", err.message);
-    // Fallback: use raw content snippet as tldr
-    return articles.map((a) => ({
-      ...a,
-      tldr: a.content?.slice(0, 200) || "Summary not available.",
-    }));
+      const parsed = JSON.parse(raw.slice(start, end + 1));
+
+      // Map tldrs back to articles
+      return articles.map((article, i) => {
+        const match = parsed.find((p) => p.index === i + 1);
+        return {
+          ...article,
+          tldr: match?.tldr || "Summary not available.",
+        };
+      });
+
+    } catch (err) {
+      const status = err?.status || err?.error?.code;
+      const isOverload = status === 503 || status === 429 ||
+        (err.message || "").includes("503") || (err.message || "").includes("429");
+
+      if (isOverload && retries > 0) {
+        retries--;
+        console.warn(`[Summarizer] Gemini overloaded (${status}), retrying in ${delay/1000}s... (${retries} left)`);
+        await new Promise((r) => setTimeout(r, delay));
+        delay *= 2; // exponential backoff: 3s → 6s → 12s
+        continue;
+      }
+
+      console.error("[Summarizer] Failed after retries:", err.message);
+      // Fallback: use raw content snippet as tldr
+      return articles.map((a) => ({
+        ...a,
+        tldr: a.content?.slice(0, 220) || "Summary not available.",
+      }));
+    }
   }
 }

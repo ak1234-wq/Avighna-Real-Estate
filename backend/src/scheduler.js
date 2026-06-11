@@ -68,9 +68,12 @@ export async function refreshTab(tabKey) {
 export async function refreshAllTabs() {
   console.log("[Scheduler] Starting full refresh of all tabs...");
 
-  // Run tabs one by one (sequential) to respect Tavily rate limits
+  // Run tabs one by one (sequential) with a small delay between each
+  // to avoid hammering Gemini summarizer simultaneously (causes 503s)
   for (const tabKey of Object.keys(TABS)) {
     await refreshTab(tabKey);
+    // 5s pause between tabs — gives Gemini time to recover
+    await new Promise((r) => setTimeout(r, 5000));
   }
 
   // Cleanup: delete articles older than 7 days

@@ -1,6 +1,8 @@
 // Per-tab search query configuration for Tavily.
-// KEY INSIGHT: Property portals (magicbricks, 99acres, housing.com) return LISTINGS not NEWS.
-// They must be excluded from all tabs. Only news/media domains should appear.
+// KEY RULES:
+// 1. Exclude property LISTING portals (magicbricks, 99acres) — they return listings not news
+// 2. mustContainAny: balanced — strict enough to block US/UK, loose enough to get India results
+// 3. Laws tab needs broader filter since Indian legal sites may not mention "mumbai" in snippet
 
 export const TABS = {
   general: {
@@ -12,15 +14,14 @@ export const TABS = {
       "Mumbai housing construction news Maharashtra",
     ],
     excludeDomains: [
-      // Social / video
       "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
-      // Property listing portals — these return LISTINGS not NEWS
       "magicbricks.com", "99acres.com", "housing.com", "squareyards.com",
       "commonfloor.com", "nobroker.com", "makaan.com", "proptiger.com",
     ],
     mustContainAny: [
       "mumbai", "maharashtra", "mhada", "mmrda", "bmc",
-      "navi mumbai", "thane", "kalyan", "panvel", "vasai"
+      "navi mumbai", "thane", "kalyan", "panvel", "vasai",
+      "india real estate", "india property", "indian real estate",
     ],
   },
 
@@ -28,21 +29,21 @@ export const TABS = {
     label: "Projects",
     scope: "Mumbai",
     queries: [
-      "Mumbai new residential project launch news 2025",
+      "Mumbai new residential project launch 2025",
       "MHADA MMRDA housing scheme Mumbai 2025",
       "Mumbai SRA redevelopment news 2025",
       "Mumbai metro infrastructure news 2025",
-      "Navi Mumbai Thane new project news 2025",
+      "Thane Navi Mumbai project launch 2025",
     ],
     excludeDomains: [
       "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
-      // CRITICAL: Exclude ALL property portals — they return old listings not news
       "magicbricks.com", "99acres.com", "housing.com", "squareyards.com",
       "commonfloor.com", "nobroker.com", "makaan.com", "proptiger.com",
     ],
     mustContainAny: [
       "mumbai", "mhada", "mmrda", "sra",
-      "navi mumbai", "thane", "kalyan", "panvel"
+      "navi mumbai", "thane", "kalyan", "panvel", "vasai",
+      "india real estate", "india property", "india project",
     ],
   },
 
@@ -53,16 +54,18 @@ export const TABS = {
       "Bombay High Court real estate ruling 2025",
       "MahaRERA order penalty builder 2025",
       "Maharashtra property court judgment 2025",
-      "RERA Maharashtra homebuyer ruling 2025",
+      "RERA Maharashtra homebuyer order 2025",
     ],
     excludeDomains: [
       "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
       "magicbricks.com", "99acres.com", "housing.com", "squareyards.com",
     ],
-    // Laws filter: Bombay HC / MahaRERA / Maharashtra courts specifically
+    // Broader filter for laws — Indian legal news sites may not say "mumbai" in snippet
     mustContainAny: [
-      "mumbai", "maharashtra", "bombay", "mahareera",
-      "bombay high court", "rera", "mhada", "navi mumbai"
+      "mumbai", "maharashtra", "bombay", "mahareera", "rera",
+      "mhada", "navi mumbai", "thane", "india real estate",
+      "india property", "india builder", "india developer",
+      "high court", "supreme court india",
     ],
   },
 
@@ -71,20 +74,21 @@ export const TABS = {
     scope: "Mumbai",
     queries: [
       "DCPR 2034 Mumbai FSI amendment 2025",
-      "MahaRERA new rules regulation 2025",
-      "Mumbai ready reckoner rate revision 2025",
+      "MahaRERA new rules notification 2025",
+      "Mumbai ready reckoner circle rate 2025",
       "BMC Mumbai development circular 2025",
-      "Maharashtra stamp duty property regulation 2025",
+      "Maharashtra stamp duty property 2025",
     ],
     excludeDomains: [
       "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
       "magicbricks.com", "99acres.com", "housing.com", "squareyards.com",
-      // Finance/commodity sites — not real estate regulatory news
-      "kitco.com", "tradingview.com", "investing.com", "moneycontrol.com",
+      "kitco.com", "tradingview.com", "investing.com",
     ],
     mustContainAny: [
       "mumbai", "maharashtra", "mahareera", "bmc", "dcpr",
-      "mhada", "ready reckoner", "stamp duty", "fsi", "mmrda"
+      "mhada", "mmrda", "ready reckoner", "stamp duty",
+      "india real estate", "india property", "rera india",
+      "fsi", "tdr", "india regulation",
     ],
   },
 
