@@ -1,9 +1,9 @@
-# Render blueprint for the backend API.
-# In Render: New + → Blueprint → point at this repo. Or create a Web Service manually
-# with the settings below. Add GEMINI_API_KEY as a secret in the dashboard.
+# Render blueprint for the Mumbai Real Estate Brief backend.
+# Deploy: Render Dashboard → New + → Blueprint → connect this repo
+
 services:
   - type: web
-    name: mumbai-brief-api
+    name: avighna-real-estate
     runtime: node
     plan: free
     rootDir: backend
@@ -11,7 +11,24 @@ services:
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
+      # ── REQUIRED: Set these as secrets in Render Dashboard ──────────────────
       - key: GEMINI_API_KEY
-        sync: false # set this in the Render dashboard (secret)
+        sync: false   # Google AI Studio key — for summarization + Ask assistant
+
+      - key: TAVILY_API_KEY
+        sync: false   # Tavily API key — for internet-wide news search
+
+      # ── REQUIRED: Set to your Vercel frontend URL ────────────────────────────
       - key: FRONTEND_ORIGIN
-        sync: false # set to your Vercel URL after deploying the frontend
+        value: https://avighna-real-estate-5eqm.vercel.app
+
+      # ── DB: Will be set when cloud DB is configured ──────────────────────────
+      # - key: DB_PATH
+      #   value: /var/data/news.db  # use Render persistent disk path
+
+      # ── Optional settings ────────────────────────────────────────────────────
+      - key: FEED_REFRESH_CRON
+        value: "*/30 * * * *"
+
+      - key: NODE_ENV
+        value: production
