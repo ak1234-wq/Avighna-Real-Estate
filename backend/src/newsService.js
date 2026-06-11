@@ -27,33 +27,31 @@ export async function getFeed(tabKey, { force = false } = {}) {
   let stories = [];
   try {
     const parsed = extractJson(text);
-    stories = Array.isArray(parsed.stories) ? parsed.stories : [];
+    if (parsed && Array.isArray(parsed.stories)) {
+      stories = parsed.stories.map((s, index) => {
+        if (!s || !s.title) return null;
+        // Use real grounded citation URL if available to prevent 404s, fallback to AI generated
+        let rawUrl = (citations && citations[index] && citations[index].url) ? citations[index].url : s.url;
+        let url = rawUrl ? String(rawUrl).trim() : "";
+        
+        if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
+          url = "https://" + url;
+        }
+        return {
+          title: String(s.title).trim(),
+          tldr: String(s.tldr || "").trim(),
+          source: String(s.source || "Source").trim(),
+          url: url,
+          published: String(s.published || "recent").trim(),
+        };
+      });
+      // Filter out invalid items AFTER mapping to preserve citation indices
+      stories = stories.filter((s) => s !== null && s.url);
+    }
   } catch (err) {
     console.error(`[feed:${tabKey}] failed to parse model output:`, err.message);
     throw new Error("Could not parse news feed from AI response");
   }
-
-  stories = stories
-    .filter((s) => s && s.title)
-    .map((s, index) => {
-      // Gemini's grounding search automatically populates the s.url with the real redirect link.
-      // We must prioritize s.url. Blindly mapping citations[index] is dangerous because 
-      // filtering shifts indices, and LLM citations don't guarantee a 1:1 mapped order.
-      let rawUrl = s.url || ((citations && citations[index] && citations[index].url) ? citations[index].url : "");
-      let url = rawUrl ? String(rawUrl).trim() : "";
-      
-      if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
-        url = "https://" + url;
-      }
-      return {
-        title: String(s.title).trim(),
-        tldr: String(s.tldr || "").trim(),
-        source: String(s.source || "Source").trim(),
-        url: url,
-        published: String(s.published || "recent").trim(),
-      };
-    })
-    .filter(s => s.url);
 
   // Parse relative date string to sort chronologically (newest first)
   const parseRelativeDate = (str) => {
