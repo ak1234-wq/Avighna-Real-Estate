@@ -32,8 +32,10 @@ export async function getFeed(tabKey, { force = false } = {}) {
   stories = stories
     .filter((s) => s && s.title)
     .map((s, index) => {
-      // Use real grounded citation URL if available to prevent 404s, fallback to AI generated
-      let rawUrl = (citations && citations[index] && citations[index].url) ? citations[index].url : s.url;
+      // Gemini's grounding search automatically populates the s.url with the real redirect link.
+      // We must prioritize s.url. Blindly mapping citations[index] is dangerous because 
+      // filtering shifts indices, and LLM citations don't guarantee a 1:1 mapped order.
+      let rawUrl = s.url || ((citations && citations[index] && citations[index].url) ? citations[index].url : "");
       let url = rawUrl ? String(rawUrl).trim() : "";
       
       if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
