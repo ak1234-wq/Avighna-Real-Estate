@@ -17,7 +17,11 @@ export async function getFeed(tabKey, { force = false } = {}) {
     return { ...cached.payload, cached: true };
   }
 
-  const prompt = buildFeedPrompt(tabKey);
+  const excludeTitles = (force && cached && cached.payload.stories) 
+    ? cached.payload.stories.map(s => s.title) 
+    : [];
+
+  const prompt = buildFeedPrompt(tabKey, excludeTitles);
   const { text, citations } = await runWithWebSearch(prompt, { maxTokens: 2200 });
 
   let stories = [];

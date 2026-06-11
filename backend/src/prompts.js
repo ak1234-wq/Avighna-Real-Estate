@@ -45,13 +45,18 @@ export const TABS = {
 };
 
 // Prompt that asks the model to web-search and return a clean JSON feed of stories.
-export function buildFeedPrompt(tabKey) {
+export function buildFeedPrompt(tabKey, excludeTitles = []) {
   const tab = TABS[tabKey] || TABS.general;
   const today = new Date().toISOString().slice(0, 10);
 
+  let excludeStr = "";
+  if (excludeTitles && excludeTitles.length > 0) {
+    excludeStr = `\n\nIMPORTANT: The user has requested a REFRESH. DO NOT return any of the following stories you previously found:\n${excludeTitles.map(t => `- "${t}"`).join("\n")}\nYou MUST find completely DIFFERENT and NEW stories that are not in this list.`;
+  }
+
   return `You are a specialised news researcher for the "${tab.label}" category of the Mumbai Real Estate Brief. Today is ${today}.
 
-CRITICAL TASK: Use web search to ONLY find stories specifically about: ${tab.brief}
+CRITICAL TASK: Use web search to ONLY find stories specifically about: ${tab.brief}${excludeStr}
 
 IMPORTANT: Do NOT perform a generic "Mumbai real estate" search. You must search specifically for terms related to ${tab.label} (e.g., if this is the Laws tab, search for Bombay High Court real estate rulings or MahaRERA judgments; if it's Projects, search for new Mumbai project launches, etc.). Your results MUST be strictly filtered to match the ${tab.label} category.
 
