@@ -49,6 +49,20 @@ export async function getFeed(tabKey, { force = false } = {}) {
     })
     .filter(s => s.url);
 
+  // Parse relative date string to sort chronologically (newest first)
+  const parseRelativeDate = (str) => {
+    const s = String(str).toLowerCase();
+    const num = parseInt(s) || 1;
+    if (s.includes("min") || s.includes("hour") || s.includes("today") || s.includes("now")) return 0;
+    if (s.includes("day")) return num;
+    if (s.includes("week")) return num * 7;
+    if (s.includes("month")) return num * 30;
+    if (s.includes("year")) return num * 365;
+    return 999;
+  };
+
+  stories.sort((a, b) => parseRelativeDate(a.published) - parseRelativeDate(b.published));
+
   const payload = {
     tab: tabKey,
     scope: TABS[tabKey].scope,

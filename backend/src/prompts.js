@@ -53,7 +53,7 @@ export function buildFeedPrompt(tabKey) {
 
 Use web search to find ${tab.brief}
 
-Find 5 to 7 of the most relevant and RECENT stories (prefer the last 2-3 weeks). Use only real
+Find 3 to 7 of the most relevant and RECENT stories (prefer the last 2-3 weeks). If you can't find 5, just return as many as you found. Use only real
 articles you actually found via search. Never invent stories, sources, or URLs.
 
 Return ONLY a JSON object (no markdown, no commentary) in exactly this shape:
@@ -72,7 +72,7 @@ Return ONLY a JSON object (no markdown, no commentary) in exactly this shape:
 Rules:
 - Every "url" must be a real link to the specific article.
 - Keep each "tldr" under 240 characters.
-- Order by importance, most significant first.
+- Order chronologically, with the MOST RECENT news first.
 - Output valid JSON only.`;
 }
 
