@@ -18,7 +18,7 @@ export async function getFeed(tabKey, { force = false } = {}) {
   }
 
   const prompt = buildFeedPrompt(tabKey);
-  const { text } = await runWithWebSearch(prompt, { maxTokens: 2200 });
+  const { text, citations } = await runWithWebSearch(prompt, { maxTokens: 2200 });
 
   let stories = [];
   try {
@@ -30,10 +30,13 @@ export async function getFeed(tabKey, { force = false } = {}) {
   }
 
   stories = stories
-    .filter((s) => s && s.title && s.url)
-    .map((s) => {
-      let url = String(s.url).trim();
-      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    .filter((s) => s && s.title)
+    .map((s, index) => {
+      // Use real grounded citation URL if available to prevent 404s, fallback to AI generated
+      let rawUrl = (citations && citations[index] && citations[index].url) ? citations[index].url : s.url;
+      let url = rawUrl ? String(rawUrl).trim() : "";
+      
+      if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
         url = "https://" + url;
       }
       return {
@@ -43,7 +46,8 @@ export async function getFeed(tabKey, { force = false } = {}) {
         url: url,
         published: String(s.published || "recent").trim(),
       };
-    });
+    })
+    .filter(s => s.url);
 
   const payload = {
     tab: tabKey,
