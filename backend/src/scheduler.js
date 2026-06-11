@@ -1,17 +1,21 @@
-// Background scheduler: every 30 min, fetch fresh news from Tavily for all tabs,
-// summarize with Gemini, and store in SQLite. Users always get instant DB reads.
+// Background scheduler: every 30 min, fetch fresh news for all tabs via
+// Tavily (primary) + Gemini grounded search (supplement), then store in SQLite.
+// Users always get instant DB reads — no AI wait on their requests.
 
 import cron from "node-cron";
 import { TABS } from "./sources.js";
-import { searchAllQueriesForTab } from "./searchService.js";
+import { searchAllQueriesForTab, searchWithGemini, mergeResults } from "./searchService.js";
 import { summarizeBatch } from "./summarizer.js";
 import { upsertMany, deleteOldArticles, getTabCounts } from "./db.js";
 
-const CRON_EXPR = process.env.FEED_REFRESH_CRON || "*/30 * * * *"; // every 30 min
+const CRON_EXPR = process.env.FEED_REFRESH_CRON || "*/30 * * * *";
 
 /**
- * Run the full pipeline for a single tab:
- *   Tavily search → filter → Gemini summarize → DB upsert
+ * Refresh a single tab:
+ *  1. Tavily search (primary, real URLs)
+ *  2. Gemini grounded search (supplement if Tavily count < geminiMinTrigger)
+ *  3. Gemini summarize batch → generate tldr per article
+ *  4. Upsert into SQLite
  */
 export async function refreshTab(tabKey) {
   const tab = TABS[tabKey];
@@ -21,58 +25,67 @@ export async function refreshTab(tabKey) {
   const startTime = Date.now();
 
   try {
-    // Step 1: Search internet via Tavily
-    const rawArticles = await searchAllQueriesForTab(
+    // Step 1: Primary — Tavily internet search
+    let articles = await searchAllQueriesForTab(
       tabKey,
       tab.queries,
-      tab.excludeDomains,
-      tab.mustContainAny || []
+      tab.excludeDomains
     );
 
-    if (!rawArticles.length) {
+    // Step 2: Supplement — Gemini grounded search if Tavily gives too few
+    const minNeeded = tab.geminiMinTrigger ?? 5;
+    if (articles.length < minNeeded && tab.geminiQuery) {
+      console.log(
+        `[Scheduler] Tab "${tabKey}": only ${articles.length} from Tavily ` +
+        `(threshold: ${minNeeded}) → triggering Gemini supplement...`
+      );
+      const geminiArticles = await searchWithGemini(tab.geminiQuery, tab.label);
+      articles = mergeResults(articles, geminiArticles);
+      console.log(`[Scheduler] Tab "${tabKey}": ${articles.length} total after merge`);
+    }
+
+    if (!articles.length) {
       console.warn(`[Scheduler] No articles found for tab: ${tabKey}`);
       return;
     }
 
-    // Step 2: Take top 15 by relevance score (avoid over-summarizing)
-    const top = rawArticles.slice(0, 15);
+    // Step 3: Take top 15 by relevance score
+    const top = articles.slice(0, 15);
 
-    // Step 3: Summarize with Gemini (batch call — single API request)
+    // Step 4: Summarize with Gemini (single batch call — has retry logic)
     const summarized = await summarizeBatch(top, tab.label);
 
-    // Step 4: Map to DB schema and upsert
+    // Step 5: Map to DB schema and upsert (duplicates ignored by URL)
     const toStore = summarized.map((a) => ({
       tab: tabKey,
       title: a.title,
       tldr: a.tldr,
       url: a.url,
-      source: extractSource(a.url),
+      source: a.source || extractSource(a.url),
       published_at: a.published_date || new Date().toISOString(),
-      relevance: Math.round((a.score || 0.5) * 10), // 0-10 scale
+      relevance: Math.round((a.score || 0.5) * 10),
     }));
 
     upsertMany(toStore);
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(
-      `[Scheduler] Tab "${tabKey}" done: ${toStore.length} articles stored in ${elapsed}s`
-    );
+    console.log(`[Scheduler] Tab "${tabKey}" done: ${toStore.length} articles stored in ${elapsed}s`);
+
   } catch (err) {
     console.error(`[Scheduler] Error refreshing tab "${tabKey}":`, err.message);
   }
 }
 
 /**
- * Refresh ALL tabs — runs sequentially to avoid hitting API rate limits.
+ * Refresh ALL tabs sequentially with a 5s gap between each tab
+ * to avoid hammering Gemini summarizer simultaneously (503 overload).
  */
 export async function refreshAllTabs() {
   console.log("[Scheduler] Starting full refresh of all tabs...");
 
-  // Run tabs one by one (sequential) with a small delay between each
-  // to avoid hammering Gemini summarizer simultaneously (causes 503s)
   for (const tabKey of Object.keys(TABS)) {
     await refreshTab(tabKey);
-    // 5s pause between tabs — gives Gemini time to recover
+    // 5s pause — lets Gemini recover between tabs
     await new Promise((r) => setTimeout(r, 5000));
   }
 
@@ -80,43 +93,34 @@ export async function refreshAllTabs() {
   const deleted = deleteOldArticles(7);
   console.log(`[Scheduler] Cleanup: removed ${deleted.changes} old articles`);
 
-  // Log DB stats
   const counts = getTabCounts();
   console.log("[Scheduler] DB stats:", counts.map((c) => `${c.tab}:${c.count}`).join(", "));
 }
 
 /**
- * Start the cron scheduler and run an initial refresh immediately on boot.
+ * Start the cron scheduler and run an immediate refresh on boot.
  */
 export function startScheduler() {
   console.log(`[Scheduler] Starting with cron: "${CRON_EXPR}"`);
 
-  // Validate cron expression
-  if (!cron.validate(CRON_EXPR)) {
-    console.error(`[Scheduler] Invalid cron expression: "${CRON_EXPR}". Using default.`);
-  }
-
-  // Schedule recurring job
   cron.schedule(CRON_EXPR, () => {
     refreshAllTabs().catch((err) =>
       console.error("[Scheduler] Uncaught error in refresh:", err)
     );
   });
 
-  // Run once immediately on startup (so DB has data right away)
+  // Run immediately on startup so DB has data right away
   console.log("[Scheduler] Running initial refresh on startup...");
   refreshAllTabs().catch((err) =>
     console.error("[Scheduler] Initial refresh failed:", err)
   );
 }
 
-// ─── Helper ──────────────────────────────────────────────────────────────────
+// ── Helper ────────────────────────────────────────────────────────────────────
 
-/** Extract readable domain name from URL as source label */
 function extractSource(url) {
   try {
-    const host = new URL(url).hostname.replace(/^www\./, "");
-    return host;
+    return new URL(url).hostname.replace(/^www\./, "");
   } catch {
     return "Source";
   }

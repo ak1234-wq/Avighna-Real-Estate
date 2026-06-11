@@ -1,113 +1,109 @@
-// Per-tab search query configuration for Tavily.
-// KEY RULES:
-// 1. Exclude property LISTING portals (magicbricks, 99acres) — they return listings not news
-// 2. mustContainAny: balanced — strict enough to block US/UK, loose enough to get India results
-// 3. Laws tab needs broader filter since Indian legal sites may not mention "mumbai" in snippet
+// Per-tab configuration: specific queries for Tavily + Gemini supplement queries.
+// NO mustContainAny filter — query specificity controls relevance instead.
+// Property LISTING portals are excluded (magicbricks, 99acres show listings, not news).
+
+const EXCLUDED_ALWAYS = [
+  "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
+  // Property listing portals — return old listings, NOT news
+  "magicbricks.com", "99acres.com", "housing.com", "squareyards.com",
+  "commonfloor.com", "nobroker.com", "makaan.com", "proptiger.com",
+  "olx.in", "sulekha.com",
+];
 
 export const TABS = {
+
+  // ── TAB 1: General Mumbai Real Estate ──────────────────────────────────────
   general: {
     label: "General",
     scope: "Mumbai",
+    // Tavily queries — broad but real-estate focused
     queries: [
-      "Mumbai real estate market news 2025",
-      "Mumbai property prices developer builder 2025",
-      "Mumbai housing construction news Maharashtra",
+      "Mumbai real estate market news June 2025",
+      "India property market housing sector update 2025",
+      "Mumbai developer builder project announcement 2025",
     ],
     excludeDomains: [
-      "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
-      "magicbricks.com", "99acres.com", "housing.com", "squareyards.com",
-      "commonfloor.com", "nobroker.com", "makaan.com", "proptiger.com",
+      ...EXCLUDED_ALWAYS,
+      "kitco.com", "tradingview.com", "investing.com",
     ],
-    mustContainAny: [
-      "mumbai", "maharashtra", "mhada", "mmrda", "bmc",
-      "navi mumbai", "thane", "kalyan", "panvel", "vasai",
-      "india real estate", "india property", "indian real estate",
-    ],
+    // Gemini supplement query — triggers if Tavily returns < 5 articles
+    geminiQuery: "latest Mumbai real estate news India property market 2025",
+    geminiMinTrigger: 5, // use Gemini if Tavily finds fewer than this
   },
 
+  // ── TAB 2: New Projects & Launches ─────────────────────────────────────────
   projects: {
     label: "Projects",
     scope: "Mumbai",
     queries: [
       "Mumbai new residential project launch 2025",
-      "MHADA MMRDA housing scheme Mumbai 2025",
-      "Mumbai SRA redevelopment news 2025",
-      "Mumbai metro infrastructure news 2025",
-      "Thane Navi Mumbai project launch 2025",
+      "MHADA MMRDA housing project Mumbai Maharashtra 2025",
+      "Mumbai SRA redevelopment scheme news 2025",
+      "Mumbai metro new line infrastructure property 2025",
+      "Thane Navi Mumbai new real estate project 2025",
     ],
-    excludeDomains: [
-      "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
-      "magicbricks.com", "99acres.com", "housing.com", "squareyards.com",
-      "commonfloor.com", "nobroker.com", "makaan.com", "proptiger.com",
-    ],
-    mustContainAny: [
-      "mumbai", "mhada", "mmrda", "sra",
-      "navi mumbai", "thane", "kalyan", "panvel", "vasai",
-      "india real estate", "india property", "india project",
-    ],
+    excludeDomains: [...EXCLUDED_ALWAYS],
+    geminiQuery: "new real estate project launch Mumbai Maharashtra MHADA MMRDA 2025",
+    geminiMinTrigger: 4,
   },
 
+  // ── TAB 3: Legal News (Bombay HC, MahaRERA, Supreme Court) ─────────────────
   laws: {
     label: "Laws",
     scope: "Mumbai",
     queries: [
-      "Bombay High Court real estate ruling 2025",
-      "MahaRERA order penalty builder 2025",
-      "Maharashtra property court judgment 2025",
-      "RERA Maharashtra homebuyer order 2025",
+      "Bombay High Court real estate property ruling 2025",
+      "MahaRERA Maharashtra RERA builder penalty order 2025",
+      "Supreme Court India property real estate judgment 2025",
+      "Mumbai builder homebuyer court case India 2025",
     ],
     excludeDomains: [
-      "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
-      "magicbricks.com", "99acres.com", "housing.com", "squareyards.com",
+      ...EXCLUDED_ALWAYS,
+      // Finance sites — not legal news
+      "kitco.com", "tradingview.com", "investing.com", "moneycontrol.com",
     ],
-    // Broader filter for laws — Indian legal news sites may not say "mumbai" in snippet
-    mustContainAny: [
-      "mumbai", "maharashtra", "bombay", "mahareera", "rera",
-      "mhada", "navi mumbai", "thane", "india real estate",
-      "india property", "india builder", "india developer",
-      "high court", "supreme court india",
-    ],
+    // Gemini is MUCH better at finding Indian legal news → lower trigger threshold
+    geminiQuery: "Bombay High Court MahaRERA ruling India real estate builder homebuyer 2025",
+    geminiMinTrigger: 2, // trigger Gemini even if Tavily finds 1-2
   },
 
+  // ── TAB 4: Rules & Regulations ──────────────────────────────────────────────
   rules: {
     label: "Rules & Regulations",
     scope: "Mumbai",
     queries: [
-      "DCPR 2034 Mumbai FSI amendment 2025",
-      "MahaRERA new rules notification 2025",
-      "Mumbai ready reckoner circle rate 2025",
-      "BMC Mumbai development circular 2025",
-      "Maharashtra stamp duty property 2025",
+      "DCPR 2034 Mumbai FSI amendment regulation 2025",
+      "MahaRERA new rule notification circular 2025",
+      "Mumbai ready reckoner circle rate revision Maharashtra 2025",
+      "BMC Mumbai development regulation circular 2025",
+      "Maharashtra stamp duty property registration 2025",
     ],
     excludeDomains: [
-      "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
-      "magicbricks.com", "99acres.com", "housing.com", "squareyards.com",
+      ...EXCLUDED_ALWAYS,
       "kitco.com", "tradingview.com", "investing.com",
     ],
-    mustContainAny: [
-      "mumbai", "maharashtra", "mahareera", "bmc", "dcpr",
-      "mhada", "mmrda", "ready reckoner", "stamp duty",
-      "india real estate", "india property", "rera india",
-      "fsi", "tdr", "india regulation",
-    ],
+    geminiQuery: "DCPR MahaRERA BMC Mumbai real estate regulation FSI stamp duty India 2025",
+    geminiMinTrigger: 4,
   },
 
+  // ── TAB 5: AI & Construction Technology (Global) ───────────────────────────
   ai: {
     label: "AI · Construction",
     scope: "Global",
     queries: [
       "artificial intelligence construction technology news 2025",
-      "AI building construction robotics automation 2025",
-      "construction digital twin BIM technology news 2025",
-      "AI quantity takeoff cost estimating construction software",
-      "generative AI structural engineering design 2025",
+      "AI building robotics automation construction news 2025",
+      "construction digital twin BIM software technology 2025",
+      "AI quantity takeoff cost estimating construction 2025",
+      "PropTech real estate technology innovation India 2025",
     ],
     excludeDomains: [
-      "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
-      "magicbricks.com", "99acres.com", "housing.com",
+      ...EXCLUDED_ALWAYS,
     ],
-    mustContainAny: [], // Global tab — no geo filter
+    geminiQuery: "AI construction technology PropTech real estate innovation news 2025",
+    geminiMinTrigger: 5,
   },
+
 };
 
 // Validate tab key
