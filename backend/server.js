@@ -7,6 +7,8 @@ import cors from "cors";
 
 import { getFeed, isValidTab } from "./src/newsService.js";
 import { ask } from "./src/askService.js";
+import { startScheduler } from "./src/scheduler.js";
+import { getTabCounts } from "./src/db.js";
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -19,8 +21,10 @@ app.use(
   })
 );
 
+// Health check — shows DB article counts per tab
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, time: new Date().toISOString() });
+  const counts = getTabCounts();
+  res.json({ ok: true, time: new Date().toISOString(), db: counts });
 });
 
 // GET /api/news?tab=general[&force=1]
@@ -63,4 +67,7 @@ app.post("/api/ask", async (req, res) => {
 const PORT = process.env.PORT || 8787;
 app.listen(PORT, () => {
   console.log(`Mumbai Real Estate Brief API listening on :${PORT}`);
+
+  // Start background news refresh scheduler (Tavily → Gemini → SQLite)
+  startScheduler();
 });

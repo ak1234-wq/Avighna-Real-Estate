@@ -1,79 +1,71 @@
-// News feed service: fetches + summarises stories per tab, with a short in-memory cache
-// so we don't hit the AI/web-search API on every page load.
+// News service: now reads from SQLite instead of calling AI on every request.
+// The background scheduler (scheduler.js) keeps the DB fresh every 30 minutes.
+// If the DB is empty for a tab, we trigger an on-demand refresh.
 
-import { runWithWebSearch, extractJson } from "./llm.js";
-import { buildFeedPrompt, TABS } from "./prompts.js";
+import { getArticlesByTab } from "./db.js";
+import { refreshTab } from "./scheduler.js";
+import { TABS, isValidTab } from "./sources.js";
 
-const CACHE_TTL_MS = Number(process.env.FEED_CACHE_TTL_MS || 10 * 60 * 1000); // 10 min
-const cache = new Map(); // tabKey -> { at, payload }
+export { isValidTab };
 
-export function isValidTab(tabKey) {
-  return Object.prototype.hasOwnProperty.call(TABS, tabKey);
+/**
+ * Get the news feed for a tab.
+ * Reads from DB (instant). If DB is empty, triggers a live refresh.
+ *
+ * @param {string} tabKey
+ * @param {object} options
+ * @param {boolean} options.force - If true, trigger a fresh Tavily fetch now
+ */
+export async function getFeed(tabKey, { force = false } = {}) {
+  if (force) {
+    // User clicked Refresh — fetch fresh from Tavily right now
+    await refreshTab(tabKey);
+  }
+
+  const rows = getArticlesByTab(tabKey, 10);
+
+  // If DB is empty (first boot, tab never fetched), do a live refresh
+  if (rows.length === 0) {
+    console.log(`[newsService] No data for tab "${tabKey}", triggering live fetch...`);
+    await refreshTab(tabKey);
+    const freshRows = getArticlesByTab(tabKey, 10);
+    return buildResponse(tabKey, freshRows, false);
+  }
+
+  return buildResponse(tabKey, rows, !force);
 }
 
-export async function getFeed(tabKey, { force = false } = {}) {
-  const cached = cache.get(tabKey);
-  if (!force && cached && Date.now() - cached.at < CACHE_TTL_MS) {
-    return { ...cached.payload, cached: true };
-  }
+function buildResponse(tabKey, rows, cached) {
+  const tab = TABS[tabKey];
+  const stories = rows.map((row) => ({
+    title: row.title,
+    tldr: row.tldr || "",
+    source: row.source || "Source",
+    url: row.url,
+    published: formatPublished(row.published_at),
+  }));
 
-  const excludeTitles = (force && cached && cached.payload.stories) 
-    ? cached.payload.stories.map(s => s.title) 
-    : [];
-
-  const prompt = buildFeedPrompt(tabKey, excludeTitles);
-  const { text, citations } = await runWithWebSearch(prompt, { maxTokens: 2200 });
-
-  let stories = [];
-  try {
-    const parsed = extractJson(text);
-    if (parsed && Array.isArray(parsed.stories)) {
-      stories = parsed.stories.map((s, index) => {
-        if (!s || !s.title) return null;
-        // Use real grounded citation URL if available to prevent 404s, fallback to AI generated
-        let rawUrl = (citations && citations[index] && citations[index].url) ? citations[index].url : s.url;
-        let url = rawUrl ? String(rawUrl).trim() : "";
-        
-        if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
-          url = "https://" + url;
-        }
-        return {
-          title: String(s.title).trim(),
-          tldr: String(s.tldr || "").trim(),
-          source: String(s.source || "Source").trim(),
-          url: url,
-          published: String(s.published || "recent").trim(),
-        };
-      });
-      // Filter out invalid items AFTER mapping to preserve citation indices
-      stories = stories.filter((s) => s !== null && s.url);
-    }
-  } catch (err) {
-    console.error(`[feed:${tabKey}] failed to parse model output:`, err.message);
-    throw new Error("Could not parse news feed from AI response");
-  }
-
-  // Parse relative date string to sort chronologically (newest first)
-  const parseRelativeDate = (str) => {
-    const s = String(str).toLowerCase();
-    const num = parseInt(s) || 1;
-    if (s.includes("min") || s.includes("hour") || s.includes("today") || s.includes("now")) return 0;
-    if (s.includes("day")) return num;
-    if (s.includes("week")) return num * 7;
-    if (s.includes("month")) return num * 30;
-    if (s.includes("year")) return num * 365;
-    return 999;
-  };
-
-  stories.sort((a, b) => parseRelativeDate(a.published) - parseRelativeDate(b.published));
-
-  const payload = {
+  return {
     tab: tabKey,
-    scope: TABS[tabKey].scope,
+    scope: tab?.scope || "Mumbai",
     stories,
-    updatedAt: new Date().toISOString(),
+    updatedAt: rows[0]?.fetched_at || new Date().toISOString(),
+    cached,
   };
+}
 
-  cache.set(tabKey, { at: Date.now(), payload });
-  return { ...payload, cached: false };
+function formatPublished(dateStr) {
+  if (!dateStr) return "recent";
+  try {
+    const date = new Date(dateStr);
+    const diffMs = Date.now() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return "today";
+    if (diffDays === 1) return "1 day ago";
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${diffDays >= 14 ? "s" : ""} ago`;
+    return `${Math.floor(diffDays / 30)} month${diffDays >= 60 ? "s" : ""} ago`;
+  } catch {
+    return "recent";
+  }
 }
