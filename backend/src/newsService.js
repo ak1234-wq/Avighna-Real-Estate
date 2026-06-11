@@ -1,6 +1,7 @@
-// News service: now reads from SQLite instead of calling AI on every request.
-// The background scheduler (scheduler.js) keeps the DB fresh every 30 minutes.
-// If the DB is empty for a tab, we trigger an on-demand refresh.
+// News service: reads from SQLite instantly.
+// Background scheduler (scheduler.js) keeps DB fresh every 30 minutes.
+// Force refresh fires a background job and returns current data immediately
+// (avoids Render's 30s request timeout).
 
 import { getArticlesByTab } from "./db.js";
 import { refreshTab } from "./scheduler.js";
@@ -8,32 +9,44 @@ import { TABS, isValidTab } from "./sources.js";
 
 export { isValidTab };
 
+// Track tabs currently being refreshed — prevents duplicate concurrent jobs
+const refreshingTabs = new Set();
+
 /**
  * Get the news feed for a tab.
- * Reads from DB (instant). If DB is empty, triggers a live refresh.
  *
- * @param {string} tabKey
- * @param {object} options
- * @param {boolean} options.force - If true, trigger a fresh Tavily fetch now
+ * Normal load  → DB read, instant (<50ms)
+ * force=true   → fires background refresh, returns CURRENT data immediately.
+ *               Frontend re-fetches after 35s to show the fresh results.
  */
 export async function getFeed(tabKey, { force = false } = {}) {
-  if (force) {
-    // User clicked Refresh — fetch fresh from Tavily right now
-    await refreshTab(tabKey);
-  }
-
   const rows = getArticlesByTab(tabKey, 10);
 
-  // If DB is empty (first boot, tab never fetched), do a live refresh
+  // First boot / tab never fetched → wait for one real fetch
   if (rows.length === 0) {
-    console.log(`[newsService] No data for tab "${tabKey}", triggering live fetch...`);
+    console.log(`[newsService] No data for "${tabKey}", awaiting first fetch...`);
     await refreshTab(tabKey);
     const freshRows = getArticlesByTab(tabKey, 10);
     return buildResponse(tabKey, freshRows, false);
   }
 
-  return buildResponse(tabKey, rows, !force);
+  // Force refresh: fire-and-forget background job, return current data NOW
+  if (force && !refreshingTabs.has(tabKey)) {
+    refreshingTabs.add(tabKey);
+    console.log(`[newsService] Background refresh started for "${tabKey}"`);
+    refreshTab(tabKey)
+      .then(() => console.log(`[newsService] Background refresh done for "${tabKey}"`))
+      .catch((err) => console.error(`[newsService] Refresh error for "${tabKey}":`, err.message))
+      .finally(() => refreshingTabs.delete(tabKey));
+  } else if (force) {
+    console.log(`[newsService] Refresh already running for "${tabKey}", skipping`);
+  }
+
+  // Return current data immediately — frontend will auto re-fetch in 35s
+  return { ...buildResponse(tabKey, rows, false), backgroundRefresh: force };
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildResponse(tabKey, rows, cached) {
   const tab = TABS[tabKey];
@@ -47,7 +60,7 @@ function buildResponse(tabKey, rows, cached) {
 
   return {
     tab: tabKey,
-    scope: tab?.scope || "Mumbai",
+    scope: tab?.scope || "Mumbai & India",
     stories,
     updatedAt: rows[0]?.fetched_at || new Date().toISOString(),
     cached,

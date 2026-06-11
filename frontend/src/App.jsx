@@ -35,12 +35,23 @@ export default function App() {
       const haveData = Boolean(feeds[tab]);
       if (force) setRefreshing(true);
       else if (!haveData) setLoading(true);
-      
+
       if (activeTabRef.current === tab) setError(null);
-      
+
       try {
         const data = await fetchNews(tab, { force });
         setFeeds((prev) => ({ ...prev, [tab]: data }));
+
+        // Backend fires a background refresh — auto re-fetch after 35s for fresh news
+        if (data.backgroundRefresh) {
+          setTimeout(() => {
+            if (activeTabRef.current === tab) {
+              fetchNews(tab, { force: false })
+                .then((fresh) => setFeeds((prev) => ({ ...prev, [tab]: fresh })))
+                .catch(() => {}); // silent — user can manually refresh if it fails
+            }
+          }, 35000);
+        }
       } catch (err) {
         if (activeTabRef.current === tab) setError(err.message);
       } finally {
@@ -50,8 +61,10 @@ export default function App() {
         }
       }
     },
-    [feeds]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
+
 
   // Load whenever the active tab changes (uses cache if we already have it).
   useEffect(() => {
