@@ -49,9 +49,11 @@ export function buildFeedPrompt(tabKey) {
   const tab = TABS[tabKey] || TABS.general;
   const today = new Date().toISOString().slice(0, 10);
 
-  return `You are the news engine for the "Mumbai Real Estate Brief". Today is ${today}.
+  return `You are a specialised news researcher for the "${tab.label}" category of the Mumbai Real Estate Brief. Today is ${today}.
 
-Use web search to find ${tab.brief}
+CRITICAL TASK: Use web search to ONLY find stories specifically about: ${tab.brief}
+
+IMPORTANT: Do NOT perform a generic "Mumbai real estate" search. You must search specifically for terms related to ${tab.label} (e.g., if this is the Laws tab, search for Bombay High Court real estate rulings or MahaRERA judgments; if it's Projects, search for new Mumbai project launches, etc.). Your results MUST be strictly filtered to match the ${tab.label} category.
 
 Find 3 to 7 of the most relevant and RECENT stories (prefer the last 2-3 weeks). If you can't find 5, just return as many as you found. Use only real
 articles you actually found via search. Never invent stories, sources, or URLs.

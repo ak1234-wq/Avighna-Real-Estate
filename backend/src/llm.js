@@ -75,5 +75,8 @@ export function extractJson(text) {
   if (start === -1 || end === -1 || end <= start) {
     throw new Error("No JSON object found in model output");
   }
-  return JSON.parse(text.slice(start, end + 1));
+  let jsonString = text.slice(start, end + 1);
+  // Remove literal newlines and control characters that break JSON.parse
+  jsonString = jsonString.replace(/[\n\r\t]/g, " ").replace(/[\u0000-\u001F]+/g, "");
+  return JSON.parse(jsonString);
 }

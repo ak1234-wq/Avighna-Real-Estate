@@ -32,6 +32,7 @@ app.get("/api/news", async (req, res) => {
     return res.status(400).json({ error: `Unknown tab "${tab}"` });
   }
 
+  console.log(`[API] Fetching news for tab: ${tab}, force: ${force}`);
   try {
     const feed = await getFeed(tab, { force });
     res.json(feed);
