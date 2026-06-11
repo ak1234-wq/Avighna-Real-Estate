@@ -1,6 +1,6 @@
-// Per-tab configuration: specific queries for Tavily + Gemini supplement queries.
-// NO mustContainAny filter — query specificity controls relevance instead.
-// Property LISTING portals are excluded (magicbricks, 99acres show listings, not news).
+// Per-tab configuration: Tavily queries + Gemini supplement queries.
+// Scope: Mumbai (primary) + India (secondary) for tabs 1-4
+//        India (primary) + Global (secondary) for tab 5 (AI)
 
 const EXCLUDED_ALWAYS = [
   "youtube.com", "reddit.com", "quora.com", "twitter.com", "x.com",
@@ -12,95 +12,105 @@ const EXCLUDED_ALWAYS = [
 
 export const TABS = {
 
-  // ── TAB 1: General Mumbai Real Estate ──────────────────────────────────────
+  // ── TAB 1: General — Mumbai + India Real Estate ───────────────────────────
   general: {
     label: "General",
-    scope: "Mumbai",
-    // Tavily queries — broad but real-estate focused
+    scope: "Mumbai & India",
     queries: [
-      "Mumbai real estate market news June 2025",
-      "India property market housing sector update 2025",
-      "Mumbai developer builder project announcement 2025",
+      // Mumbai first
+      "Mumbai real estate property market news 2025",
+      "Mumbai builder developer housing update 2025",
+      // India-wide
+      "India real estate property market news 2025",
+      "India housing sector developer update 2025",
     ],
     excludeDomains: [
       ...EXCLUDED_ALWAYS,
       "kitco.com", "tradingview.com", "investing.com",
     ],
-    // Gemini supplement query — triggers if Tavily returns < 5 articles
-    geminiQuery: "latest Mumbai real estate news India property market 2025",
-    geminiMinTrigger: 5, // use Gemini if Tavily finds fewer than this
+    geminiQuery:
+      "latest Mumbai real estate news AND India property market update 2025",
+    geminiMinTrigger: 5,
   },
 
-  // ── TAB 2: New Projects & Launches ─────────────────────────────────────────
+  // ── TAB 2: Projects — Mumbai + India Launches ─────────────────────────────
   projects: {
     label: "Projects",
-    scope: "Mumbai",
+    scope: "Mumbai & India",
     queries: [
-      "Mumbai new residential project launch 2025",
-      "MHADA MMRDA housing project Mumbai Maharashtra 2025",
-      "Mumbai SRA redevelopment scheme news 2025",
-      "Mumbai metro new line infrastructure property 2025",
-      "Thane Navi Mumbai new real estate project 2025",
+      // Mumbai / MMR projects
+      "Mumbai new residential commercial project launch 2025",
+      "MHADA MMRDA housing scheme Mumbai Maharashtra 2025",
+      "Mumbai SRA redevelopment metro infrastructure 2025",
+      // India-wide project launches
+      "India new real estate project launch city 2025",
+      "India affordable housing scheme government 2025",
     ],
     excludeDomains: [...EXCLUDED_ALWAYS],
-    geminiQuery: "new real estate project launch Mumbai Maharashtra MHADA MMRDA 2025",
+    geminiQuery:
+      "new real estate project launch Mumbai Maharashtra AND India housing scheme 2025",
     geminiMinTrigger: 4,
   },
 
-  // ── TAB 3: Legal News (Bombay HC, MahaRERA, Supreme Court) ─────────────────
+  // ── TAB 3: Laws — Mumbai Courts + India RERA ──────────────────────────────
   laws: {
     label: "Laws",
-    scope: "Mumbai",
+    scope: "Mumbai & India",
     queries: [
-      "Bombay High Court real estate property ruling 2025",
-      "MahaRERA Maharashtra RERA builder penalty order 2025",
-      "Supreme Court India property real estate judgment 2025",
-      "Mumbai builder homebuyer court case India 2025",
+      // Mumbai / Maharashtra courts
+      "Bombay High Court real estate ruling 2025",
+      "MahaRERA Maharashtra builder penalty order 2025",
+      // India-wide legal
+      "Supreme Court India real estate property judgment 2025",
+      "RERA India builder homebuyer court case 2025",
     ],
     excludeDomains: [
       ...EXCLUDED_ALWAYS,
-      // Finance sites — not legal news
       "kitco.com", "tradingview.com", "investing.com", "moneycontrol.com",
     ],
-    // Gemini is MUCH better at finding Indian legal news → lower trigger threshold
-    geminiQuery: "Bombay High Court MahaRERA ruling India real estate builder homebuyer 2025",
-    geminiMinTrigger: 2, // trigger Gemini even if Tavily finds 1-2
+    geminiQuery:
+      "Bombay High Court MahaRERA ruling AND India RERA Supreme Court real estate builder homebuyer 2025",
+    geminiMinTrigger: 2, // Gemini is better at Indian legal news → trigger early
   },
 
-  // ── TAB 4: Rules & Regulations ──────────────────────────────────────────────
+  // ── TAB 4: Rules & Regulations — Mumbai + India ───────────────────────────
   rules: {
     label: "Rules & Regulations",
-    scope: "Mumbai",
+    scope: "Mumbai & India",
     queries: [
-      "DCPR 2034 Mumbai FSI amendment regulation 2025",
+      // Mumbai / Maharashtra regulations
+      "DCPR 2034 Mumbai FSI amendment 2025",
       "MahaRERA new rule notification circular 2025",
-      "Mumbai ready reckoner circle rate revision Maharashtra 2025",
-      "BMC Mumbai development regulation circular 2025",
-      "Maharashtra stamp duty property registration 2025",
+      "Mumbai ready reckoner circle rate BMC regulation 2025",
+      // India-wide regulations
+      "India real estate regulation RERA rule 2025",
+      "India stamp duty property registration policy 2025",
     ],
     excludeDomains: [
       ...EXCLUDED_ALWAYS,
       "kitco.com", "tradingview.com", "investing.com",
     ],
-    geminiQuery: "DCPR MahaRERA BMC Mumbai real estate regulation FSI stamp duty India 2025",
+    geminiQuery:
+      "DCPR MahaRERA BMC Mumbai regulation AND India RERA stamp duty real estate policy 2025",
     geminiMinTrigger: 4,
   },
 
-  // ── TAB 5: AI & Construction Technology (Global) ───────────────────────────
+  // ── TAB 5: AI & Construction Tech — India first, then Global ─────────────
   ai: {
     label: "AI · Construction",
-    scope: "Global",
+    scope: "India & Global",
     queries: [
-      "artificial intelligence construction technology news 2025",
-      "AI building robotics automation construction news 2025",
-      "construction digital twin BIM software technology 2025",
-      "AI quantity takeoff cost estimating construction 2025",
-      "PropTech real estate technology innovation India 2025",
+      // India PropTech / construction AI — priority
+      "India PropTech real estate technology news 2025",
+      "India construction technology AI innovation 2025",
+      "India smart city housing technology startup 2025",
+      // Global construction AI — secondary
+      "AI construction technology robotics news global 2025",
+      "construction digital twin BIM AI software 2025",
     ],
-    excludeDomains: [
-      ...EXCLUDED_ALWAYS,
-    ],
-    geminiQuery: "AI construction technology PropTech real estate innovation news 2025",
+    excludeDomains: [...EXCLUDED_ALWAYS],
+    geminiQuery:
+      "India PropTech construction technology AI innovation AND global AI construction robotics news 2025",
     geminiMinTrigger: 5,
   },
 
