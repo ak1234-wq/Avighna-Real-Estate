@@ -36,14 +36,25 @@ export async function runWithWebSearch(prompt, { maxTokens = 2048 } = {}) {
   };
 
   let response;
-  try {
-    response = await getClient().models.generateContent(request);
-  } catch (err) {
-    if (err?.status === 429 || err?.status === 503) {
-      await new Promise((r) => setTimeout(r, 1500));
+  let retries = 3;
+  let delay = 2000;
+
+  while (true) {
+    try {
       response = await getClient().models.generateContent(request);
-    } else {
-      throw err;
+      break;
+    } catch (err) {
+      if ((err?.status === 429 || err?.status === 503) && retries > 0) {
+        retries--;
+        console.warn(`[AI] Model overloaded (${err.status}), retrying in ${delay}ms...`);
+        await new Promise((r) => setTimeout(r, delay));
+        delay *= 2; // Exponential backoff: 2s, 4s, 8s
+      } else {
+        if (err?.status === 429 || err?.status === 503) {
+          throw new Error("The AI provider is currently experiencing high demand. Please try again in a few moments.");
+        }
+        throw err;
+      }
     }
   }
 
