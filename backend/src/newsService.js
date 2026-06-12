@@ -1,25 +1,39 @@
 // News service: reads from SQLite instantly.
-// Background scheduler (scheduler.js) keeps DB fresh every 30 minutes.
-// Force refresh fires a background job and returns current data immediately
-// (avoids Render's 30s request timeout).
+// Background scheduler keeps DB fresh every 2 hours.
+//
+// REFRESH BUTTON: RSS is fast (<3s), so force refresh is SYNCHRONOUS —
+// fetches RSS → summarizes → updates DB → returns fresh news instantly.
+// (No background job needed — unlike Tavily which took 30-40s)
 
-import { getArticlesByTab } from "./db.js";
+import { getArticlesByTab, deleteArticlesByTab } from "./db.js";
 import { refreshTab } from "./scheduler.js";
 import { TABS, isValidTab } from "./sources.js";
 
 export { isValidTab };
 
-// Track tabs currently being refreshed — prevents duplicate concurrent jobs
-const refreshingTabs = new Set();
-
 /**
  * Get the news feed for a tab.
  *
  * Normal load  → DB read, instant (<50ms)
- * force=true   → fires background refresh, returns CURRENT data immediately.
- *               Frontend re-fetches after 35s to show the fresh results.
+ * force=true   → RSS fetch + Gemini summarize + DB update → return FRESH news
+ *                Takes ~8-10 seconds (RSS=2s + Gemini=6s) — acceptable for a refresh click
  */
 export async function getFeed(tabKey, { force = false } = {}) {
+  // Force refresh: fetch fresh RSS, summarize, update DB, return new data
+  if (force) {
+    console.log(`[newsService] Force refresh for "${tabKey}" — fetching fresh RSS...`);
+    try {
+      // Delete old articles for this tab so fresh ones take their place
+      deleteArticlesByTab(tabKey);
+      // Fetch RSS + summarize + store in DB
+      await refreshTab(tabKey);
+      console.log(`[newsService] Force refresh done for "${tabKey}"`);
+    } catch (err) {
+      console.error(`[newsService] Force refresh failed for "${tabKey}":`, err.message);
+      // If refresh fails, we'll still return whatever's in DB
+    }
+  }
+
   const rows = getArticlesByTab(tabKey, 10);
 
   // First boot / tab never fetched → wait for one real fetch
@@ -30,20 +44,7 @@ export async function getFeed(tabKey, { force = false } = {}) {
     return buildResponse(tabKey, freshRows, false);
   }
 
-  // Force refresh: fire-and-forget background job, return current data NOW
-  if (force && !refreshingTabs.has(tabKey)) {
-    refreshingTabs.add(tabKey);
-    console.log(`[newsService] Background refresh started for "${tabKey}"`);
-    refreshTab(tabKey)
-      .then(() => console.log(`[newsService] Background refresh done for "${tabKey}"`))
-      .catch((err) => console.error(`[newsService] Refresh error for "${tabKey}":`, err.message))
-      .finally(() => refreshingTabs.delete(tabKey));
-  } else if (force) {
-    console.log(`[newsService] Refresh already running for "${tabKey}", skipping`);
-  }
-
-  // Return current data immediately — frontend will auto re-fetch in 35s
-  return { ...buildResponse(tabKey, rows, false), backgroundRefresh: force };
+  return buildResponse(tabKey, rows, !force);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

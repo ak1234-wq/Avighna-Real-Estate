@@ -39,19 +39,10 @@ export default function App() {
       if (activeTabRef.current === tab) setError(null);
 
       try {
+        // force=true: backend fetches fresh RSS + summarizes synchronously (~8-10s)
+        // force=false: backend reads from DB instantly (<50ms)
         const data = await fetchNews(tab, { force });
         setFeeds((prev) => ({ ...prev, [tab]: data }));
-
-        // Backend fires a background refresh — auto re-fetch after 35s for fresh news
-        if (data.backgroundRefresh) {
-          setTimeout(() => {
-            if (activeTabRef.current === tab) {
-              fetchNews(tab, { force: false })
-                .then((fresh) => setFeeds((prev) => ({ ...prev, [tab]: fresh })))
-                .catch(() => {}); // silent — user can manually refresh if it fails
-            }
-          }, 35000);
-        }
       } catch (err) {
         if (activeTabRef.current === tab) setError(err.message);
       } finally {

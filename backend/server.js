@@ -68,6 +68,6 @@ const PORT = process.env.PORT || 8787;
 app.listen(PORT, () => {
   console.log(`Mumbai Real Estate Brief API listening on :${PORT}`);
 
-  // Start background news refresh scheduler (Tavily → Gemini → SQLite)
+  // Start background news refresh scheduler (RSS → Gemini → SQLite)
   startScheduler();
 });

@@ -70,6 +70,13 @@ export function upsertMany(articles) {
   insertAll(articles);
 }
 
+// Delete all articles for a specific tab (used by force refresh)
+export function deleteArticlesByTab(tab) {
+  return db
+    .prepare(`DELETE FROM articles WHERE tab = ?`)
+    .run(tab);
+}
+
 // Delete articles older than N days (cleanup)
 export function deleteOldArticles(daysOld = 7) {
   return db
