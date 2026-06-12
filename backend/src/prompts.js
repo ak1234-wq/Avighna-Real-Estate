@@ -58,10 +58,15 @@ export function buildFeedPrompt(tabKey, excludeTitles = []) {
 
 CRITICAL TASK: Use web search to ONLY find stories specifically about: ${tab.brief}${excludeStr}
 
-IMPORTANT: Do NOT perform a generic "Mumbai real estate" search. You must search specifically for terms related to ${tab.label} (e.g., if this is the Laws tab, search for Bombay High Court real estate rulings or MahaRERA judgments; if it's Projects, search for new Mumbai project launches, etc.). Your results MUST be strictly filtered to match the ${tab.label} category.
+IMPORTANT: Do NOT perform a generic "${tab.label}" search. You must search specifically for terms related to ${tab.label} in the context of REAL ESTATE, PROPERTY, CONSTRUCTION, or HOUSING. For example:
+- If this is the Laws tab: search for court rulings specifically about REAL ESTATE property disputes, RERA orders, or construction-related judgments. Do NOT include generic criminal law, constitutional law, or unrelated court cases.
+- If this is the Rules tab: search for regulations specifically about REAL ESTATE development, FSI, stamp duty, property registration. Do NOT include generic government regulations.
+- Your results MUST be strictly filtered to the REAL ESTATE / CONSTRUCTION / PROPERTY domain within the ${tab.label} category.
 
 Find 3 to 7 of the most relevant and RECENT stories (prefer the last 2-3 weeks). If you can't find 5, just return as many as you found. Use only real
 articles you actually found via search. Never invent stories, sources, or URLs.
+
+STRICT FILTER: Every story MUST be related to at least one of: real estate, property market, construction, housing, building development, infrastructure affecting property, RERA, or real estate regulation. If a story does NOT relate to any of these topics, DO NOT include it.
 
 Return ONLY a JSON object (no markdown, no commentary) in exactly this shape:
 {
@@ -80,7 +85,8 @@ Rules:
 - Every "url" must be a real link to the specific article.
 - Keep each "tldr" under 240 characters.
 - Order chronologically, with the MOST RECENT news first.
-- Output valid JSON only.`;
+- Output valid JSON only.
+- REJECT any story not related to real estate, construction, property, or housing.`;
 }
 
 // Prompt for the conversational assistant.

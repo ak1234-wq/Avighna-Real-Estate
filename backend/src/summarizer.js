@@ -38,18 +38,22 @@ export async function summarizeBatch(articles, tabLabel = "Real Estate") {
 Category: "${tabLabel}"
 
 Below are ${articles.length} news article excerpts fetched from the internet.
-For each article, write a factual 1–2 sentence tldr that explains WHY this matters to a real estate developer.
+For each article:
+1. First check if it is RELEVANT to real estate, property, housing, construction, or infrastructure.
+2. If RELEVANT: write a factual 1–2 sentence tldr that explains WHY this matters to a real estate developer.
+3. If NOT RELEVANT (e.g., generic crime news, politics unrelated to property, celebrity gossip, sports, etc.): set tldr to "IRRELEVANT".
 
 Return ONLY a JSON array (no markdown, no extra text) in this exact format:
 [
   { "index": 1, "tldr": "..." },
-  { "index": 2, "tldr": "..." }
+  { "index": 2, "tldr": "IRRELEVANT" }
 ]
 
 Rules:
 - Keep each tldr under 220 characters
 - Be factual, no hype
 - If the content is too vague, write "Details awaited." as the tldr
+- Mark as "IRRELEVANT" any article that is NOT about real estate, property, construction, housing, RERA, or building infrastructure
 
 Articles:
 ${articleList}`;

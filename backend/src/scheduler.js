@@ -36,11 +36,21 @@ export async function refreshTab(tabKey) {
     // Step 2: Take top 15 (already sorted by date — newest first)
     const top = articles.slice(0, 15);
 
-    // Step 3: Summarize with Gemini
+    // Step 3: Summarize with Gemini (also marks irrelevant articles)
     const summarized = await summarizeBatch(top, tab.label);
 
+    // Step 3.5: Filter out articles marked as IRRELEVANT by the AI
+    const relevant = summarized.filter(
+      (a) => a.tldr && a.tldr.toUpperCase() !== "IRRELEVANT"
+    );
+
+    if (!relevant.length) {
+      console.warn(`[Scheduler] No relevant articles after filtering for tab: ${tabKey}`);
+      return;
+    }
+
     // Step 4: Store in DB
-    const toStore = summarized.map((a) => ({
+    const toStore = relevant.map((a) => ({
       tab: tabKey,
       title: a.title,
       tldr: a.tldr,

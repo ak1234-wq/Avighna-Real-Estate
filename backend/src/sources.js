@@ -63,17 +63,18 @@ export const TABS = {
     country: "IN",
     googleNewsQueries: [
       // ── Mumbai priority ──
-      "MahaRERA order builder homebuyer penalty",
-      "Bombay High Court real estate ruling",
-      "Maharashtra real estate court case",
-      "Mumbai property dispute court order",
+      "MahaRERA order penalty builder homebuyer real estate",
+      "Bombay High Court real estate property ruling judgment",
+      "Maharashtra real estate property court case ruling",
+      "Mumbai property construction dispute court order",
+      "Mumbai redevelopment legal dispute court real estate",
       // ── India ──
-      "RERA India builder homebuyer court",
-      "Supreme Court India real estate judgment",
-      "India property law court ruling",
+      "RERA India real estate builder homebuyer court ruling",
+      "Supreme Court India real estate property judgment",
+      "India property law real estate construction court ruling",
     ],
     directFeeds: [
-      { name: "Bar and Bench", url: "https://www.barandbench.com/feed" },
+      { name: "ET Realty", url: "https://realty.economictimes.indiatimes.com/rss/topstories" },
     ],
   },
 
@@ -85,15 +86,15 @@ export const TABS = {
     country: "IN",
     googleNewsQueries: [
       // ── Mumbai priority ──
-      "MahaRERA new rules regulation notification",
-      "DCPR Mumbai FSI amendment BMC",
-      "Mumbai ready reckoner circle rate",
-      "Mumbai BMC development regulation circular",
-      "Maharashtra stamp duty registration",
+      "MahaRERA new rules regulation real estate notification",
+      "DCPR Mumbai FSI amendment BMC real estate construction",
+      "Mumbai ready reckoner circle rate property real estate",
+      "Mumbai BMC development regulation circular construction",
+      "Maharashtra stamp duty registration property real estate",
       // ── India ──
-      "India RERA regulation update",
-      "India real estate policy stamp duty",
-      "India property registration rule change",
+      "India RERA regulation real estate update",
+      "India real estate construction policy stamp duty",
+      "India property real estate registration rule change",
     ],
     directFeeds: [
       { name: "ET Realty", url: "https://realty.economictimes.indiatimes.com/rss/topstories" },
