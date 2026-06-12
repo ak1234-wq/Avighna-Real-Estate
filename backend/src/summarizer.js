@@ -1,6 +1,6 @@
-// Summarizer: takes raw Tavily articles and uses Gemini to generate
+// Summarizer: takes raw RSS articles and uses Gemini to generate
 // a clean 2-line tldr for each. Gemini does NOT search here —
-// it only reads the content we already fetched from Tavily.
+// it only reads the content we already fetched from RSS feeds.
 
 import { GoogleGenAI } from "@google/genai";
 
@@ -16,10 +16,10 @@ function getClient() {
 }
 
 /**
- * Given a batch of raw Tavily articles, ask Gemini to produce a tldr for each.
- * Gemini does NOT use web search here — we pass the article content directly.
+ * Given a batch of raw RSS articles, ask Gemini to produce a tldr for each.
+ * Gemini does NOT use web search — we pass the article content directly.
  *
- * @param {Array} articles - Raw articles from Tavily
+ * @param {Array} articles - Raw articles from RSS feeds
  * @param {string} tabLabel - Tab name for context ("Laws", "Projects" etc.)
  * @returns {Array} - Same articles with `tldr` field added
  */

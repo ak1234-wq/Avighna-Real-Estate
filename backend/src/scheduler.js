@@ -1,21 +1,21 @@
-// Background scheduler: every 30 min, fetch fresh news for all tabs via
-// Tavily (primary) + Gemini grounded search (supplement), then store in SQLite.
-// Users always get instant DB reads — no AI wait on their requests.
+// Background scheduler: every 2 hours, fetch fresh news from RSS feeds,
+// summarize with Gemini, and store in SQLite.
+// Users always get instant DB reads — no AI wait on requests.
 
 import cron from "node-cron";
 import { TABS } from "./sources.js";
-import { searchAllQueriesForTab, searchWithGemini, mergeResults } from "./searchService.js";
+import { fetchAllForTab } from "./searchService.js";
 import { summarizeBatch } from "./summarizer.js";
 import { upsertMany, deleteOldArticles, getTabCounts } from "./db.js";
 
-const CRON_EXPR = process.env.FEED_REFRESH_CRON || "*/30 * * * *";
+const CRON_EXPR = process.env.FEED_REFRESH_CRON || "0 */2 * * *"; // every 2 hours
 
 /**
  * Refresh a single tab:
- *  1. Tavily search (primary, real URLs)
- *  2. Gemini grounded search (supplement if Tavily count < geminiMinTrigger)
- *  3. Gemini summarize batch → generate tldr per article
- *  4. Upsert into SQLite
+ *  1. Fetch RSS feeds (Google News + direct publishers)
+ *  2. Take top 15 newest articles
+ *  3. Summarize with Gemini (single batch call)
+ *  4. Store in SQLite
  */
 export async function refreshTab(tabKey) {
   const tab = TABS[tabKey];
@@ -25,45 +25,29 @@ export async function refreshTab(tabKey) {
   const startTime = Date.now();
 
   try {
-    // Step 1: Primary — Tavily internet search
-    let articles = await searchAllQueriesForTab(
-      tabKey,
-      tab.queries,
-      tab.excludeDomains
-    );
-
-    // Step 2: Supplement — Gemini grounded search if Tavily gives too few
-    const minNeeded = tab.geminiMinTrigger ?? 5;
-    if (articles.length < minNeeded && tab.geminiQuery) {
-      console.log(
-        `[Scheduler] Tab "${tabKey}": only ${articles.length} from Tavily ` +
-        `(threshold: ${minNeeded}) → triggering Gemini supplement...`
-      );
-      const geminiArticles = await searchWithGemini(tab.geminiQuery, tab.label);
-      articles = mergeResults(articles, geminiArticles);
-      console.log(`[Scheduler] Tab "${tabKey}": ${articles.length} total after merge`);
-    }
+    // Step 1: Fetch all RSS feeds for this tab
+    const articles = await fetchAllForTab(tabKey, tab);
 
     if (!articles.length) {
       console.warn(`[Scheduler] No articles found for tab: ${tabKey}`);
       return;
     }
 
-    // Step 3: Take top 15 by relevance score
+    // Step 2: Take top 15 (already sorted by date — newest first)
     const top = articles.slice(0, 15);
 
-    // Step 4: Summarize with Gemini (single batch call — has retry logic)
+    // Step 3: Summarize with Gemini
     const summarized = await summarizeBatch(top, tab.label);
 
-    // Step 5: Map to DB schema and upsert (duplicates ignored by URL)
+    // Step 4: Store in DB
     const toStore = summarized.map((a) => ({
       tab: tabKey,
       title: a.title,
       tldr: a.tldr,
       url: a.url,
       source: a.source || extractSource(a.url),
-      published_at: a.published_date || new Date().toISOString(),
-      relevance: Math.round((a.score || 0.5) * 10),
+      published_at: a.publishedDate || new Date().toISOString(),
+      relevance: 5,
     }));
 
     upsertMany(toStore);
@@ -77,16 +61,15 @@ export async function refreshTab(tabKey) {
 }
 
 /**
- * Refresh ALL tabs sequentially with a 5s gap between each tab
- * to avoid hammering Gemini summarizer simultaneously (503 overload).
+ * Refresh ALL tabs sequentially with a 3s gap between each tab.
  */
 export async function refreshAllTabs() {
   console.log("[Scheduler] Starting full refresh of all tabs...");
 
   for (const tabKey of Object.keys(TABS)) {
     await refreshTab(tabKey);
-    // 5s pause — lets Gemini recover between tabs
-    await new Promise((r) => setTimeout(r, 5000));
+    // 3s pause between tabs — RSS is fast but Gemini summarizer needs breathing room
+    await new Promise((r) => setTimeout(r, 3000));
   }
 
   // Cleanup: delete articles older than 7 days
@@ -98,7 +81,7 @@ export async function refreshAllTabs() {
 }
 
 /**
- * Start the cron scheduler and run an immediate refresh on boot.
+ * Start cron scheduler + immediate first fetch on boot.
  */
 export function startScheduler() {
   console.log(`[Scheduler] Starting with cron: "${CRON_EXPR}"`);
@@ -109,7 +92,7 @@ export function startScheduler() {
     );
   });
 
-  // Run immediately on startup so DB has data right away
+  // Run immediately on startup
   console.log("[Scheduler] Running initial refresh on startup...");
   refreshAllTabs().catch((err) =>
     console.error("[Scheduler] Initial refresh failed:", err)

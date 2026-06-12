@@ -1,183 +1,182 @@
-// Dual search engine: Tavily (primary) + Gemini grounded (supplement/fallback)
-// Tavily gives real URLs. Gemini supplements when Tavily finds too few results.
+// RSS-based search service.
+// Primary: Google News RSS (50,000+ sources, unlimited, free, no API key)
+// Supplement: Direct publisher RSS feeds for guaranteed coverage of key Indian sources
+//
+// This replaces Tavily entirely — zero API cost for search.
 
-import { tavily } from "@tavily/core";
-import { GoogleGenAI } from "@google/genai";
+import Parser from "rss-parser";
 
-// ── Tavily client ─────────────────────────────────────────────────────────────
-let tavilyClient;
-function getTavily() {
-  if (!tavilyClient) {
-    if (!process.env.TAVILY_API_KEY) throw new Error("TAVILY_API_KEY is not set");
-    tavilyClient = tavily({ apiKey: process.env.TAVILY_API_KEY });
-  }
-  return tavilyClient;
-}
+const parser = new Parser({
+  timeout: 10000, // 10s timeout per feed
+  headers: {
+    "User-Agent": "Mozilla/5.0 (compatible; AvighnaBrief/1.0)",
+    "Accept": "application/rss+xml, application/xml, text/xml, */*",
+  },
+  customFields: {
+    item: [["media:content", "media"], ["dc:creator", "creator"]],
+  },
+});
 
-// ── Gemini client ─────────────────────────────────────────────────────────────
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-let geminiClient;
-function getGemini() {
-  if (!geminiClient) {
-    if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set");
-    geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  }
-  return geminiClient;
-}
-
-// ── Tavily search ─────────────────────────────────────────────────────────────
+// ── Google News RSS ──────────────────────────────────────────────────────────
 
 /**
- * Search via Tavily for news articles.
- * Returns: [{ title, url, content, score, published_date }]
+ * Fetch articles from Google News RSS for a search query.
+ * Google News indexes 50,000+ publishers — covers the entire internet.
+ * No API key needed. No rate limits.
+ *
+ * @param {string} query - Search query (e.g. "Mumbai real estate")
+ * @param {string} lang - Language code (default: en-IN)
+ * @param {string} country - Country code (default: IN)
+ * @returns {Array} Normalized article objects
  */
-export async function searchNews(query, excludeDomains = [], maxResults = 7) {
+export async function fetchGoogleNewsRSS(query, lang = "en-IN", country = "IN") {
+  const encoded = encodeURIComponent(query);
+  const url = `https://news.google.com/rss/search?q=${encoded}&hl=${lang}&gl=${country}&ceid=${country}:${lang.split("-")[0]}`;
+
   try {
-    const response = await getTavily().search(query, {
-      searchDepth: "advanced",
-      topic: "news",
-      maxResults,
-      excludeDomains,
-      includeAnswer: false,
-      includeRawContent: false,
-    });
-    return (response.results || [])
-      .map((r) => ({
-        title: (r.title || "").trim(),
-        url: (r.url || "").trim(),
-        content: (r.content || r.snippet || "").trim(),
-        score: r.score || 0,
-        published_date: r.publishedDate || null,
-      }))
-      .filter((r) => r.title && r.url);
+    const feed = await parser.parseURL(url);
+    return (feed.items || []).map((item) => normalizeArticle(item, "Google News"));
   } catch (err) {
-    console.error(`[Tavily] Search failed for "${query}":`, err.message);
+    console.error(`[RSS] Google News failed for "${query}":`, err.message);
     return [];
   }
 }
 
+// ── Direct Publisher RSS ──────────────────────────────────────────────────────
+
 /**
- * Run all Tavily queries for a tab in parallel, deduplicate by URL.
+ * Fetch articles from a direct publisher RSS feed URL.
+ *
+ * @param {string} feedUrl - RSS feed URL
+ * @param {string} sourceName - Publisher name for display
+ * @returns {Array} Normalized article objects
  */
-export async function searchAllQueriesForTab(tabKey, queries, excludeDomains = []) {
-  console.log(`[Tavily] Searching ${queries.length} queries for tab: ${tabKey}`);
+export async function fetchDirectRSS(feedUrl, sourceName) {
+  try {
+    const feed = await parser.parseURL(feedUrl);
+    return (feed.items || []).map((item) => normalizeArticle(item, sourceName));
+  } catch (err) {
+    console.error(`[RSS] Direct feed failed for "${sourceName}" (${feedUrl}):`, err.message);
+    return [];
+  }
+}
 
-  const results = await Promise.all(
-    queries.map((q) => searchNews(q, excludeDomains))
-  );
+// ── Tab-level aggregation ────────────────────────────────────────────────────
 
-  // Deduplicate by URL
+/**
+ * Fetch all RSS feeds for a tab config, merge, deduplicate, sort by date.
+ *
+ * @param {string} tabKey - Tab identifier
+ * @param {object} tabConfig - Tab config from sources.js
+ * @returns {Array} Deduplicated, sorted articles
+ */
+export async function fetchAllForTab(tabKey, tabConfig) {
+  console.log(`[RSS] Fetching feeds for tab: ${tabKey} (${tabConfig.label})`);
+
+  const promises = [];
+
+  // Google News queries (primary — covers entire internet)
+  for (const query of tabConfig.googleNewsQueries || []) {
+    promises.push(
+      fetchGoogleNewsRSS(query, tabConfig.lang || "en-IN", tabConfig.country || "IN")
+    );
+  }
+
+  // Direct publisher feeds (supplement — guaranteed key publishers)
+  for (const feed of tabConfig.directFeeds || []) {
+    promises.push(fetchDirectRSS(feed.url, feed.name));
+  }
+
+  const results = await Promise.all(promises);
+
+  // Flatten + deduplicate by cleaned URL
   const seen = new Set();
   const merged = [];
+
   for (const batch of results) {
     for (const article of batch) {
-      if (!seen.has(article.url)) {
-        seen.add(article.url);
+      const cleanUrl = cleanURL(article.url);
+      if (cleanUrl && !seen.has(cleanUrl)) {
+        seen.add(cleanUrl);
         merged.push(article);
       }
     }
   }
 
-  merged.sort((a, b) => b.score - a.score);
-  console.log(`[Tavily] Tab "${tabKey}": found ${merged.length} unique articles`);
+  // Sort by date (newest first)
+  merged.sort((a, b) => {
+    const da = a.publishedDate ? new Date(a.publishedDate).getTime() : 0;
+    const db = b.publishedDate ? new Date(b.publishedDate).getTime() : 0;
+    return db - da;
+  });
+
+  console.log(`[RSS] Tab "${tabKey}": ${merged.length} unique articles from ${promises.length} feeds`);
   return merged;
 }
 
-// ── Gemini grounded search (supplement) ──────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Use Gemini's Google Search grounding to find real estate news articles.
- * Returns articles in the same format as Tavily results.
- * Used as supplement when Tavily returns too few results.
+ * Normalize an RSS item into our standard article format.
  */
-export async function searchWithGemini(geminiQuery, tabLabel) {
-  console.log(`[Gemini] Supplemental search for tab: ${tabLabel}`);
+function normalizeArticle(item, fallbackSource) {
+  // Google News wraps actual article URL in a redirect — extract the real one
+  let url = item.link || item.guid || "";
 
-  const today = new Date().toISOString().slice(0, 10);
-  const prompt = `Today is ${today}. You are a news researcher specializing in Indian real estate.
+  // Google News sometimes uses redirect URLs like:
+  // https://news.google.com/rss/articles/... → extract real URL from content
+  // But the RSS <link> is usually the direct publisher URL, so this is fine.
 
-Use Google Search to find 5 recent news articles about: ${geminiQuery}
+  // Extract source from title: "Headline - Publisher Name"
+  let title = (item.title || "").trim();
+  let source = fallbackSource;
 
-Return ONLY a JSON array (no markdown, no extra text):
-[
-  {
-    "title": "exact article headline",
-    "url": "https://direct-link-to-article",
-    "source": "Publication name",
-    "content": "2-3 sentence summary of the article",
-    "published_date": "YYYY-MM-DD or relative like '2 days ago'"
+  // Google News format: "Article Title - Publisher Name"
+  const dashIdx = title.lastIndexOf(" - ");
+  if (dashIdx > 0 && fallbackSource === "Google News") {
+    source = title.slice(dashIdx + 3).trim();
+    title = title.slice(0, dashIdx).trim();
   }
-]
 
-Rules:
-- Only include REAL articles you actually found via search
-- Only real estate, property, construction, legal/regulatory news related to India/Mumbai
-- No YouTube, Reddit, Quora links
-- No property listing pages (magicbricks, 99acres, housing.com)
-- Must be from last 30 days
-- Return valid JSON array only`;
+  // Clean up HTML from description/content
+  const rawContent = item.contentSnippet || item.content || item.summary || "";
+  const content = rawContent
+    .replace(/<[^>]+>/g, "")  // strip HTML
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim()
+    .slice(0, 500);
 
-  let retries = 2;
-  let delay = 3000;
-
-  while (true) {
-    try {
-      const response = await getGemini().models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          maxOutputTokens: 1500,
-          temperature: 0.1,
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      });
-
-      const raw = (response.text || "").trim();
-      const start = raw.indexOf("[");
-      const end = raw.lastIndexOf("]");
-      if (start === -1 || end === -1) return [];
-
-      const parsed = JSON.parse(raw.slice(start, end + 1));
-
-      // Normalize to same format as Tavily
-      const articles = parsed
-        .filter((a) => a && a.title && a.url)
-        .filter((a) => a.url.startsWith("http"))
-        .map((a) => ({
-          title: String(a.title).trim(),
-          url: String(a.url).trim(),
-          content: String(a.content || "").trim(),
-          score: 0.7, // default relevance for Gemini results
-          published_date: a.published_date || null,
-          source: a.source || null,
-        }));
-
-      console.log(`[Gemini] Tab "${tabLabel}": found ${articles.length} articles`);
-      return articles;
-    } catch (err) {
-      const isOverload = (err?.status === 429 || err?.status === 503 ||
-        (err.message || "").includes("503") || (err.message || "").includes("429"));
-
-      if (isOverload && retries > 0) {
-        retries--;
-        console.warn(`[Gemini] Overloaded, retrying in ${delay / 1000}s...`);
-        await new Promise((r) => setTimeout(r, delay));
-        delay *= 2;
-        continue;
-      }
-      console.error(`[Gemini] Supplement search failed for "${tabLabel}":`, err.message);
-      return [];
-    }
-  }
+  return {
+    title,
+    url,
+    content,
+    source,
+    publishedDate: item.isoDate || item.pubDate || null,
+    score: 1, // RSS doesn't have relevance scores — all equal
+  };
 }
 
 /**
- * Merge Tavily + Gemini results, deduplicate by URL.
- * Gemini results go at the END (Tavily is primary).
+ * Clean URL for deduplication: remove tracking params, normalize.
  */
-export function mergeResults(tavilyResults, geminiResults) {
-  const seen = new Set(tavilyResults.map((a) => a.url));
-  const newFromGemini = geminiResults.filter((a) => !seen.has(a.url));
-  return [...tavilyResults, ...newFromGemini];
+function cleanURL(url) {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    // Remove common tracking params
+    u.searchParams.delete("utm_source");
+    u.searchParams.delete("utm_medium");
+    u.searchParams.delete("utm_campaign");
+    u.searchParams.delete("utm_content");
+    u.searchParams.delete("utm_term");
+    u.searchParams.delete("ref");
+    u.searchParams.delete("source");
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
